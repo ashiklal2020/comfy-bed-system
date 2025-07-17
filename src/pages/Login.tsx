@@ -1,39 +1,49 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { supabase } from '@/integrations/supabase/client';
 
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
-  const { login } = useAuth();
+  const { user, signIn } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user) {
+      // Get user role and redirect accordingly
+      supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+        .then(({ data }) => {
+          if (data?.role === 'admin') {
+            navigate('/admin/dashboard');
+          } else {
+            navigate('/student/profile');
+          }
+        });
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
     setIsLoading(true);
+    setError('');
 
     try {
-      await login(username, password);
-      
-      // Get user from localStorage to determine redirect
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      if (user.role === 'admin') {
-        navigate('/admin/dashboard');
-      } else {
-        navigate('/student/profile');
-      }
-    } catch (err) {
-      setError('Invalid username or password');
+      await signIn(username, password);
+    } catch (err: any) {
+      setError(err.message || 'Login failed');
     } finally {
       setIsLoading(false);
     }
@@ -42,16 +52,22 @@ const Login = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">Hostel Management</CardTitle>
-          <CardDescription>
-            Sign in to access your account
+        <CardHeader>
+          <CardTitle className="text-2xl font-bold text-center">Hostel Management</CardTitle>
+          <CardDescription className="text-center">
+            Sign in to your account
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username">Username or Email</Label>
               <Input
                 id="username"
                 type="text"
@@ -71,24 +87,15 @@ const Login = () => {
                 required
               />
             </div>
-
-            {error && (
-              <div className="flex items-center space-x-2 text-destructive text-sm">
-                <AlertCircle className="h-4 w-4" />
-                <span>{error}</span>
-              </div>
-            )}
-
+            
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Signing in...' : 'Login'}
+              {isLoading ? 'Signing in...' : 'Sign In'}
             </Button>
+            
+            <div className="text-sm text-center text-muted-foreground">
+              Demo credentials: admin/admin or student/student
+            </div>
           </form>
-
-          <div className="mt-6 text-sm text-muted-foreground">
-            <p className="font-medium mb-2">Demo Credentials:</p>
-            <p>Admin: username "admin", password "admin"</p>
-            <p>Student: username "student", password "student"</p>
-          </div>
         </CardContent>
       </Card>
     </div>

@@ -1,162 +1,200 @@
 
 import React, { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Bed, DashboardStats } from '@/types/hostel';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Users, Bed, Clock, CheckCircle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
-const AdminDashboard = () => {
+interface DashboardStats {
+  totalStudents: number;
+  totalBeds: number;
+  allocatedBeds: number;
+  vacantBeds: number;
+  pendingRequests: number;
+}
+
+const Dashboard = () => {
   const [stats, setStats] = useState<DashboardStats>({
+    totalStudents: 0,
     totalBeds: 0,
     allocatedBeds: 0,
-    vacantBeds: 0
+    vacantBeds: 0,
+    pendingRequests: 0
   });
-  const [beds, setBeds] = useState<Bed[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchStats = async () => {
+    try {
+      setIsLoading(true);
+
+      // Get total students
+      const { count: studentCount } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('role', 'student');
+
+      // Get bed statistics
+      const { data: bedStats } = await supabase
+        .from('beds')
+        .select('is_occupied');
+
+      const totalBeds = bedStats?.length || 0;
+      const allocatedBeds = bedStats?.filter(bed => bed.is_occupied).length || 0;
+      const vacantBeds = totalBeds - allocatedBeds;
+
+      // Get pending requests
+      const { count: pendingCount } = await supabase
+        .from('bed_change_requests')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+
+      setStats({
+        totalStudents: studentCount || 0,
+        totalBeds,
+        allocatedBeds,
+        vacantBeds,
+        pendingRequests: pendingCount || 0
+      });
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // Mock data - in a real app, this would be API calls
-    const mockBeds: Bed[] = [
-      {
-        id: 1,
-        room_number: '101',
-        bed_identifier: 'A',
-        is_occupied: true,
-        allocated_to: { id: 2, name: 'John Smith', username: 'student' }
-      },
-      {
-        id: 2,
-        room_number: '101',
-        bed_identifier: 'B',
-        is_occupied: false
-      },
-      {
-        id: 3,
-        room_number: '102',
-        bed_identifier: 'A',
-        is_occupied: true,
-        allocated_to: { id: 3, name: 'Jane Doe', username: 'jdoe' }
-      },
-      {
-        id: 4,
-        room_number: '102',
-        bed_identifier: 'B',
-        is_occupied: false
-      },
-      {
-        id: 5,
-        room_number: '103',
-        bed_identifier: 'A',
-        is_occupied: false
-      }
-    ];
-
-    setBeds(mockBeds);
-    
-    const allocated = mockBeds.filter(bed => bed.is_occupied).length;
-    const total = mockBeds.length;
-    
-    setStats({
-      totalBeds: total,
-      allocatedBeds: allocated,
-      vacantBeds: total - allocated
-    });
+    fetchStats();
   }, []);
 
-  const handleDeallocate = (bedId: number) => {
-    setBeds(prevBeds => 
-      prevBeds.map(bed => 
-        bed.id === bedId 
-          ? { ...bed, is_occupied: false, allocated_to: undefined }
-          : bed
-      )
+  if (isLoading) {
+    return (
+      <div className="p-6">
+        <div className="text-center">Loading dashboard...</div>
+      </div>
     );
-    
-    setStats(prevStats => ({
-      ...prevStats,
-      allocatedBeds: prevStats.allocatedBeds - 1,
-      vacantBeds: prevStats.vacantBeds + 1
-    }));
-  };
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <Alert variant="destructive">
+          <AlertDescription>Error loading dashboard: {error}</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Hostel Overview</h1>
-        <p className="text-muted-foreground">Dashboard overview of bed allocations</p>
+        <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+        <p className="text-muted-foreground">Overview of hostel management system</p>
       </div>
 
-      {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card>
-          <CardHeader className="pb-2">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Students</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalStudents}</div>
+            <p className="text-xs text-muted-foreground">
+              Registered students
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Beds</CardTitle>
+            <Bed className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalBeds}</div>
+            <p className="text-xs text-muted-foreground">
+              Available bed spaces
+            </p>
           </CardContent>
         </Card>
-        
+
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Allocated</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Occupied Beds</CardTitle>
+            <CheckCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">{stats.allocatedBeds}</div>
+            <div className="text-2xl font-bold">{stats.allocatedBeds}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.vacantBeds} beds vacant
+            </p>
           </CardContent>
         </Card>
-        
+
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Vacant</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Pending Requests</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.vacantBeds}</div>
+            <div className="text-2xl font-bold">{stats.pendingRequests}</div>
+            <p className="text-xs text-muted-foreground">
+              Awaiting review
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Bed List */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Bed Status</CardTitle>
-          <CardDescription>Current status of all beds in the hostel</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {beds.map((bed) => (
-              <div key={bed.id} className="flex items-center justify-between p-3 border rounded-lg">
-                <div className="flex items-center space-x-4">
-                  <span className="font-medium">
-                    Room {bed.room_number} - Bed {bed.bed_identifier}
-                  </span>
-                  {bed.is_occupied ? (
-                    <div className="flex items-center space-x-2">
-                      <Badge variant="destructive">Occupied</Badge>
-                      <span className="text-sm text-muted-foreground">
-                        ({bed.allocated_to?.name})
-                      </span>
-                    </div>
-                  ) : (
-                    <Badge variant="secondary">Vacant</Badge>
-                  )}
-                </div>
-                
-                {bed.is_occupied && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDeallocate(bed.id)}
-                  >
-                    Deallocate
-                  </Button>
-                )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Bed Occupancy</CardTitle>
+            <CardDescription>Current bed allocation status</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Occupied</span>
+                <span className="text-sm font-medium">{stats.allocatedBeds}</span>
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              <div className="w-full bg-secondary rounded-full h-2">
+                <div 
+                  className="bg-primary h-2 rounded-full" 
+                  style={{ width: `${stats.totalBeds > 0 ? (stats.allocatedBeds / stats.totalBeds) * 100 : 0}%` }}
+                ></div>
+              </div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>0</span>
+                <span>{stats.totalBeds}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Quick Actions</CardTitle>
+            <CardDescription>Common administrative tasks</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="text-sm">
+              • Manage student registrations and bed assignments
+            </div>
+            <div className="text-sm">
+              • Review and process bed change requests
+            </div>
+            <div className="text-sm">
+              • Monitor bed occupancy and availability
+            </div>
+            <div className="text-sm">
+              • Generate reports and statistics
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };
 
-export default AdminDashboard;
+export default Dashboard;

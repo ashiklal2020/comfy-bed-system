@@ -1,55 +1,147 @@
 
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { BedChangeRequest } from '@/types/hostel';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { User, Bed, MessageSquare, Clock, Check, X } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+
+interface StudentProfile {
+  id: string;
+  full_name: string;
+  username: string;
+  email?: string;
+  contact_info?: string;
+  course?: string;
+  allocated_bed?: {
+    id: string;
+    room_number: string;
+    bed_identifier: string;
+  } | null;
+}
+
+interface BedChangeRequest {
+  id: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+  admin_notes?: string;
+  current_bed: {
+    room_number: string;
+    bed_identifier: string;
+  } | null;
+}
 
 const StudentProfile = () => {
   const { user } = useAuth();
+  const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [activeRequest, setActiveRequest] = useState<BedChangeRequest | null>(null);
   const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+  const [requestReason, setRequestReason] = useState('');
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
 
-  // Mock student data with allocated bed
-  const studentData = {
-    full_name: user?.full_name || 'John Smith',
-    course: user?.course || 'Computer Science',
-    email: user?.email || 'john@student.com',
-    contact_info: '+1234567890',
-    allocated_bed: {
-      room_number: '101',
-      bed_identifier: 'A'
+  const fetchProfile = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(`
+          *,
+          allocated_bed:beds!allocated_to (
+            id,
+            room_number,
+            bed_identifier
+          )
+        `)
+        .eq('id', user.id)
+        .single();
+
+      if (error) throw error;
+      setProfile(data);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const fetchActiveRequest = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('bed_change_requests')
+        .select(`
+          *,
+          current_bed:beds!current_bed_id (
+            room_number,
+            bed_identifier
+          )
+        `)
+        .eq('student_id', user.id)
+        .in('status', ['pending', 'approved'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      setActiveRequest(data);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    // Mock check for active request
-    // In a real app, this would be an API call
-    const mockRequest: BedChangeRequest | null = null; // Set to null for no active request
-    setActiveRequest(mockRequest);
-  }, []);
+    if (user) {
+      fetchProfile();
+      fetchActiveRequest();
+    }
+  }, [user]);
 
   const handleRequestBedChange = async () => {
+    if (!user || !profile) return;
+
     setIsSubmittingRequest(true);
     
-    // Mock API call
-    setTimeout(() => {
-      const newRequest: BedChangeRequest = {
-        id: Date.now(),
-        student: { id: user?.id || 0, name: user?.full_name || '' },
-        current_bed: {
-          room_number: studentData.allocated_bed.room_number,
-          bed_identifier: studentData.allocated_bed.bed_identifier
-        },
-        status: 'pending',
-        request_date: new Date().toISOString()
-      };
-      
-      setActiveRequest(newRequest);
+    try {
+      const { error } = await supabase
+        .from('bed_change_requests')
+        .insert({
+          student_id: user.id,
+          current_bed_id: profile.allocated_bed?.id || null,
+          reason: requestReason,
+          status: 'pending'
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Request Submitted",
+        description: "Your bed change request has been submitted for review",
+      });
+
+      setRequestReason('');
+      setIsDialogOpen(false);
+      fetchActiveRequest();
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
       setIsSubmittingRequest(false);
-    }, 1000);
+    }
   };
 
   const getStatusIcon = (status: string) => {
@@ -88,14 +180,41 @@ const StudentProfile = () => {
     });
   };
 
+  if (isLoading) {
+    return (
+      <div className="p-6">
+        <div className="text-center">Loading profile...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <Alert variant="destructive">
+          <AlertDescription>Error loading profile: {error}</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="p-6">
+        <Alert variant="destructive">
+          <AlertDescription>Profile not found</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Welcome, {studentData.full_name}!</h1>
+        <h1 className="text-3xl font-bold">Welcome, {profile.full_name}!</h1>
         <p className="text-muted-foreground">Your profile and bed information</p>
       </div>
 
-      {/* Profile Details */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
@@ -107,23 +226,30 @@ const StudentProfile = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium text-muted-foreground">Name</label>
-              <div className="text-lg">{studentData.full_name}</div>
+              <div className="text-lg">{profile.full_name}</div>
             </div>
             
             <div>
-              <label className="text-sm font-medium text-muted-foreground">Course</label>
-              <div className="text-lg">{studentData.course}</div>
+              <label className="text-sm font-medium text-muted-foreground">Username</label>
+              <div className="text-lg">{profile.username}</div>
             </div>
             
             <div>
               <label className="text-sm font-medium text-muted-foreground">Email</label>
-              <div className="text-lg">{studentData.email}</div>
+              <div className="text-lg">{profile.email || 'Not provided'}</div>
             </div>
             
             <div>
               <label className="text-sm font-medium text-muted-foreground">Contact</label>
-              <div className="text-lg">{studentData.contact_info}</div>
+              <div className="text-lg">{profile.contact_info || 'Not provided'}</div>
             </div>
+
+            {profile.course && (
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Course</label>
+                <div className="text-lg">{profile.course}</div>
+              </div>
+            )}
           </div>
           
           <div className="pt-4 border-t">
@@ -132,7 +258,10 @@ const StudentProfile = () => {
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Your Allocated Bed</label>
                 <div className="text-lg font-medium">
-                  Room {studentData.allocated_bed.room_number} - Bed {studentData.allocated_bed.bed_identifier}
+                  {profile.allocated_bed ? 
+                    `Room ${profile.allocated_bed.room_number} - Bed ${profile.allocated_bed.bed_identifier}` : 
+                    'No bed assigned'
+                  }
                 </div>
               </div>
             </div>
@@ -140,7 +269,6 @@ const StudentProfile = () => {
         </CardContent>
       </Card>
 
-      {/* Request Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
@@ -153,7 +281,6 @@ const StudentProfile = () => {
         </CardHeader>
         <CardContent>
           {activeRequest ? (
-            // Show active request status
             <div className="space-y-4">
               <div className="flex items-center space-x-3">
                 <Badge variant={getStatusVariant(activeRequest.status)} className="flex items-center space-x-1">
@@ -161,14 +288,23 @@ const StudentProfile = () => {
                   <span className="capitalize">{activeRequest.status}</span>
                 </Badge>
                 <span className="text-sm text-muted-foreground">
-                  Requested: {formatDate(activeRequest.request_date)}
+                  Requested: {formatDate(activeRequest.created_at)}
                 </span>
               </div>
               
               <div className="p-4 bg-muted rounded-lg">
                 <div className="text-sm">
-                  <strong>Current Bed:</strong> Room {activeRequest.current_bed.room_number} - Bed {activeRequest.current_bed.bed_identifier}
+                  <strong>Current Bed:</strong> {activeRequest.current_bed ? 
+                    `Room ${activeRequest.current_bed.room_number} - Bed ${activeRequest.current_bed.bed_identifier}` : 
+                    'No bed assigned'
+                  }
                 </div>
+                
+                {activeRequest.reason && (
+                  <div className="text-sm mt-2">
+                    <strong>Reason:</strong> {activeRequest.reason}
+                  </div>
+                )}
                 
                 {activeRequest.status === 'pending' && (
                   <div className="text-sm text-muted-foreground mt-2">
@@ -182,35 +318,87 @@ const StudentProfile = () => {
                   </div>
                 )}
                 
-                {activeRequest.status === 'rejected' && (
-                  <div className="text-sm text-destructive mt-2">
-                    Your request has been rejected. You can submit a new request if needed.
-                    {activeRequest.admin_notes && (
-                      <div className="mt-1">
-                        <strong>Note:</strong> {activeRequest.admin_notes}
-                      </div>
-                    )}
+                {activeRequest.admin_notes && (
+                  <div className="text-sm mt-2">
+                    <strong>Admin Notes:</strong> {activeRequest.admin_notes}
                   </div>
                 )}
               </div>
               
               {activeRequest.status === 'rejected' && (
-                <Button onClick={handleRequestBedChange} disabled={isSubmittingRequest}>
-                  {isSubmittingRequest ? 'Submitting...' : 'Submit New Request'}
-                </Button>
+                <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button>Submit New Request</Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Submit Bed Change Request</DialogTitle>
+                      <DialogDescription>
+                        Please provide a reason for your bed change request
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="reason">Reason for bed change</Label>
+                        <Textarea
+                          id="reason"
+                          value={requestReason}
+                          onChange={(e) => setRequestReason(e.target.value)}
+                          placeholder="Please explain why you need a bed change..."
+                          required
+                        />
+                      </div>
+                      <Button 
+                        onClick={handleRequestBedChange} 
+                        disabled={isSubmittingRequest || !requestReason.trim()}
+                        className="w-full"
+                      >
+                        {isSubmittingRequest ? 'Submitting...' : 'Submit Request'}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               )}
             </div>
           ) : (
-            // Show request form
             <div className="space-y-4">
               <div className="text-sm text-muted-foreground">
                 You currently have no active bed change requests. If you would like to request a bed change, 
                 click the button below.
               </div>
               
-              <Button onClick={handleRequestBedChange} disabled={isSubmittingRequest}>
-                {isSubmittingRequest ? 'Submitting Request...' : 'Request Bed Change'}
-              </Button>
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button>Request Bed Change</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Submit Bed Change Request</DialogTitle>
+                    <DialogDescription>
+                      Please provide a reason for your bed change request
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="reason">Reason for bed change</Label>
+                      <Textarea
+                        id="reason"
+                        value={requestReason}
+                        onChange={(e) => setRequestReason(e.target.value)}
+                        placeholder="Please explain why you need a bed change..."
+                        required
+                      />
+                    </div>
+                    <Button 
+                      onClick={handleRequestBedChange} 
+                      disabled={isSubmittingRequest || !requestReason.trim()}
+                      className="w-full"
+                    >
+                      {isSubmittingRequest ? 'Submitting...' : 'Submit Request'}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
           )}
         </CardContent>

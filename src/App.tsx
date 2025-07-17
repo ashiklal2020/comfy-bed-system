@@ -4,9 +4,9 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import Layout from "@/components/Layout";
+import { SupabaseAuthProvider } from "@/contexts/SupabaseAuthContext";
+import { SupabaseProtectedRoute } from "@/components/SupabaseProtectedRoute";
+import SupabaseLayout from "@/components/SupabaseLayout";
 import Login from "@/pages/Login";
 import Unauthorized from "@/pages/Unauthorized";
 import AdminDashboard from "@/pages/admin/Dashboard";
@@ -21,7 +21,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <AuthProvider>
+      <SupabaseAuthProvider>
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
@@ -33,34 +33,34 @@ const App = () => (
             <Route
               path="/*"
               element={
-                <ProtectedRoute>
-                  <Layout />
-                </ProtectedRoute>
+                <SupabaseProtectedRoute>
+                  <SupabaseLayout />
+                </SupabaseProtectedRoute>
               }
             >
               {/* Admin Routes */}
               <Route
                 path="admin/dashboard"
                 element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <SupabaseProtectedRoute allowedRoles={['admin']}>
                     <AdminDashboard />
-                  </ProtectedRoute>
+                  </SupabaseProtectedRoute>
                 }
               />
               <Route
                 path="admin/students"
                 element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <SupabaseProtectedRoute allowedRoles={['admin']}>
                     <StudentManagement />
-                  </ProtectedRoute>
+                  </SupabaseProtectedRoute>
                 }
               />
               <Route
                 path="admin/requests"
                 element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <SupabaseProtectedRoute allowedRoles={['admin']}>
                     <RequestManagement />
-                  </ProtectedRoute>
+                  </SupabaseProtectedRoute>
                 }
               />
               
@@ -68,9 +68,9 @@ const App = () => (
               <Route
                 path="student/profile"
                 element={
-                  <ProtectedRoute allowedRoles={['student']}>
+                  <SupabaseProtectedRoute allowedRoles={['student']}>
                     <StudentProfile />
-                  </ProtectedRoute>
+                  </SupabaseProtectedRoute>
                 }
               />
             </Route>
@@ -79,7 +79,7 @@ const App = () => (
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
         </BrowserRouter>
-      </AuthProvider>
+      </SupabaseAuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );

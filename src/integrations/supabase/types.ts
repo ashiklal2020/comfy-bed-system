@@ -14,16 +14,159 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      bed_change_requests: {
+        Row: {
+          admin_notes: string | null
+          created_at: string | null
+          current_bed_id: string | null
+          id: string
+          reason: string | null
+          requested_bed_id: string | null
+          status: Database["public"]["Enums"]["request_status"] | null
+          student_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          admin_notes?: string | null
+          created_at?: string | null
+          current_bed_id?: string | null
+          id?: string
+          reason?: string | null
+          requested_bed_id?: string | null
+          status?: Database["public"]["Enums"]["request_status"] | null
+          student_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          admin_notes?: string | null
+          created_at?: string | null
+          current_bed_id?: string | null
+          id?: string
+          reason?: string | null
+          requested_bed_id?: string | null
+          status?: Database["public"]["Enums"]["request_status"] | null
+          student_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bed_change_requests_current_bed_id_fkey"
+            columns: ["current_bed_id"]
+            isOneToOne: false
+            referencedRelation: "beds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bed_change_requests_requested_bed_id_fkey"
+            columns: ["requested_bed_id"]
+            isOneToOne: false
+            referencedRelation: "beds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bed_change_requests_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      beds: {
+        Row: {
+          allocated_to: string | null
+          bed_identifier: string
+          created_at: string | null
+          id: string
+          is_occupied: boolean | null
+          room_number: string
+          updated_at: string | null
+        }
+        Insert: {
+          allocated_to?: string | null
+          bed_identifier: string
+          created_at?: string | null
+          id?: string
+          is_occupied?: boolean | null
+          room_number: string
+          updated_at?: string | null
+        }
+        Update: {
+          allocated_to?: string | null
+          bed_identifier?: string
+          created_at?: string | null
+          id?: string
+          is_occupied?: boolean | null
+          room_number?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "beds_allocated_to_fkey"
+            columns: ["allocated_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          contact_info: string | null
+          course: string | null
+          created_at: string | null
+          email: string | null
+          full_name: string
+          id: string
+          role: Database["public"]["Enums"]["user_role"]
+          updated_at: string | null
+          username: string
+        }
+        Insert: {
+          contact_info?: string | null
+          course?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name: string
+          id: string
+          role?: Database["public"]["Enums"]["user_role"]
+          updated_at?: string | null
+          username: string
+        }
+        Update: {
+          contact_info?: string | null
+          course?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name?: string
+          id?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          updated_at?: string | null
+          username?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      allocate_bed: {
+        Args: { bed_id: string; student_id: string }
+        Returns: boolean
+      }
+      deallocate_bed: {
+        Args: { bed_id: string }
+        Returns: boolean
+      }
+      get_user_role: {
+        Args: { user_id: string }
+        Returns: Database["public"]["Enums"]["user_role"]
+      }
     }
     Enums: {
-      [_ in never]: never
+      request_status: "pending" | "approved" | "rejected"
+      user_role: "admin" | "student"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +293,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      request_status: ["pending", "approved", "rejected"],
+      user_role: ["admin", "student"],
+    },
   },
 } as const
